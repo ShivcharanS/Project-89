@@ -3,15 +3,18 @@ import {
   View,
   Text,
   StyleSheet,
+  SafeAreaView,
   Platform,
   StatusBar,
   Image,
-  Dimensions
+  Dimensions,
+  TouchableOpacity
 } from "react-native";
 import Ionicons from "react-native-vector-icons/Ionicons";
 import { RFValue } from "react-native-responsive-fontsize";
 import AppLoading from "expo-app-loading";
 import * as Font from "expo-font";
+import firebase from "firebase";
 
 let customFonts = {
   "Bubblegum-Sans": require("../assets/fonts/BubblegumSans-Regular.ttf")
@@ -21,7 +24,12 @@ export default class PostCard extends Component {
   constructor(props) {
     super(props);
     this.state = {
-      fontsLoaded: false
+      fontsLoaded: false,
+      light_theme: true,
+      post_id: this.props.post.key,
+      post_data: this.props.post.value,
+      is_liked: false,
+      likes: this.props.post.value.likes
     };
   }
 
@@ -32,49 +40,160 @@ export default class PostCard extends Component {
 
   componentDidMount() {
     this._loadFontsAsync();
+    this.fetchUser();
   }
 
+  likeAction = () => {
+    if (this.state.is_liked) {
+      firebase
+        .database()
+        .ref("posts")
+        .child(this.state.story_id)
+        .child("likes")
+        .set(firebase.database.ServerValue.increment(-1));
+      this.setState({ likes: (this.state.likes -= 1), is_liked: false });
+    } else {
+      firebase
+        .database()
+        .ref("posts")
+        .child(this.state.story_id)
+        .child("likes")
+        .set(firebase.database.ServerValue.increment(1));
+      this.setState({ likes: (this.state.likes += 1), is_liked: true });
+    }
+  };
+
+  fetchUser = () => {
+    let theme;
+    firebase
+      .database()
+      .ref("/users/" + firebase.auth().currentUser.uid)
+      .on("value", snapshot => {
+        theme = snapshot.val().current_theme;
+        this.setState({ light_theme: theme === "light" });
+      });
+  };
+
   render() {
+    let story = this.state.story_data;
     if (!this.state.fontsLoaded) {
       return <AppLoading />;
     } else {
+      let images = {
+        image_1: require("../assets/image_1.png"),
+        image_2: require("../assets/image_2.png"),
+        image_3: require("../assets/image_3.png"),
+        image_4: require("../assets/image_4.png"),
+        image_5: require("../assets/image_5.png")
+      };
       return (
-        <View style={styles.container}>
-          <View style={styles.cardContainer}>
+        <TouchableOpacity
+          style={styles.container}
+          onPress={() =>
+            this.props.navigation.navigate("PostScreen", {
+              story: story
+            })
+          }
+        >
+          <SafeAreaView style={styles.droidSafeArea} />
+          <View
+            style={
+              this.state.light_theme
+                ? styles.cardContainerLight
+                : styles.cardContainer
+            }
+          >
             <Image
-              source={require("../assets/profile_img.png")}
+              source={images[story.preview_image]}
               style={styles.storyImage}
             ></Image>
 
             <View style={styles.titleContainer}>
-              <Text style={styles.storyTitleText}>
-              </Text>
-              <Text style={styles.storyAuthorText}>
-              </Text>
-              <Text style={styles.descriptionText}>
-              </Text>
-            </View>
-            <View style={styles.actionContainer}>
-              <View style={styles.likeButton}>
-                <Ionicons name={"heart"} size={RFValue(30)} color={"white"} />
-                <Text style={styles.likeText}>12k</Text>
+              <View style={styles.titleTextContainer}>
+                <Text
+                  style={
+                    this.state.light_theme
+                      ? styles.storyTitleTextLight
+                      : styles.storyTitleText
+                  }
+                >
+                  {story.title}
+                </Text>
+                <Text
+                  style={
+                    this.state.light_theme
+                      ? styles.storyAuthorTextLight
+                      : styles.storyAuthorText
+                  }
+                >
+                  {story.author}
+                </Text>
+                <Text
+                  style={
+                    this.state.light_theme
+                      ? styles.descriptionTextLight
+                      : styles.descriptionText
+                  }
+                >
+                  {this.props.story.description}
+                </Text>
               </View>
             </View>
+
+            <View style={styles.actionContainer}>
+              <TouchableOpacity
+                style={
+                  this.state.is_liked
+                    ? styles.likeButtonLiked
+                    : styles.likeButtonDisliked
+                }
+                onPress={() => this.likeAction()}
+              >
+                <Ionicons
+                  name={"heart"}
+                  size={RFValue(30)}
+                  color={this.state.light_theme ? "black" : "white"}
+                />
+
+                <Text
+                  style={
+                    this.state.light_theme
+                      ? styles.likeTextLight
+                      : styles.likeText
+                  }
+                >
+                  {this.state.likes}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-        </View>
+        </TouchableOpacity>
       );
     }
   }
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1
+  droidSafeArea: {
+    marginTop: Platform.OS === "android" ? StatusBar.currentHeight : 0
   },
   cardContainer: {
     margin: RFValue(13),
     backgroundColor: "#2f345d",
     borderRadius: RFValue(20)
+  },
+  cardContainerLight: {
+    margin: RFValue(13),
+    backgroundColor: "white",
+    borderRadius: RFValue(20),
+    shadowColor: "rgb(0, 0, 0)",
+    shadowOffset: {
+      width: 3,
+      height: 3
+    },
+    shadowOpacity: RFValue(0.5),
+    shadowRadius: RFValue(5),
+    elevation: RFValue(2)
   },
   storyImage: {
     resizeMode: "contain",
@@ -86,28 +205,51 @@ const styles = StyleSheet.create({
     paddingLeft: RFValue(20),
     justifyContent: "center"
   },
+  titleTextContainer: {
+    flex: 0.8
+  },
+  iconContainer: {
+    flex: 0.2
+  },
   storyTitleText: {
-    fontSize: RFValue(25),
     fontFamily: "Bubblegum-Sans",
+    fontSize: RFValue(25),
     color: "white"
   },
-  storyAuthorText: {
-    fontSize: RFValue(18),
+  storyTitleTextLight: {
     fontFamily: "Bubblegum-Sans",
+    fontSize: RFValue(25),
+    color: "black"
+  },
+  storyAuthorText: {
+    fontFamily: "Bubblegum-Sans",
+    fontSize: RFValue(18),
     color: "white"
+  },
+  storyAuthorTextLight: {
+    fontFamily: "Bubblegum-Sans",
+    fontSize: RFValue(18),
+    color: "black"
+  },
+  descriptionContainer: {
+    marginTop: RFValue(5)
   },
   descriptionText: {
     fontFamily: "Bubblegum-Sans",
-    fontSize: 13,
-    color: "white",
-    paddingTop: RFValue(10)
+    fontSize: RFValue(13),
+    color: "white"
+  },
+  descriptionTextLight: {
+    fontFamily: "Bubblegum-Sans",
+    fontSize: RFValue(13),
+    color: "black"
   },
   actionContainer: {
     justifyContent: "center",
     alignItems: "center",
     padding: RFValue(10)
   },
-  likeButton: {
+  likeButtonLiked: {
     width: RFValue(160),
     height: RFValue(40),
     justifyContent: "center",
@@ -116,10 +258,27 @@ const styles = StyleSheet.create({
     backgroundColor: "#eb3948",
     borderRadius: RFValue(30)
   },
+  likeButtonDisliked: {
+    width: RFValue(160),
+    height: RFValue(40),
+    justifyContent: "center",
+    alignItems: "center",
+    flexDirection: "row",
+    borderColor: "#eb3948",
+    borderWidth: 2,
+    borderRadius: RFValue(30)
+  },
   likeText: {
     color: "white",
     fontFamily: "Bubblegum-Sans",
-    fontSize: RFValue(25),
-    marginLeft: RFValue(5)
+    fontSize: 25,
+    marginLeft: 25,
+    marginTop: 6
+  },
+  likeTextLight: {
+    fontFamily: "Bubblegum-Sans",
+    fontSize: 25,
+    marginLeft: 25,
+    marginTop: 6
   }
 });
